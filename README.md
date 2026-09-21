@@ -125,14 +125,28 @@ curl -s -X POST http://localhost:18080/auth/realms/camunda-platform/protocol/ope
 
 → Token giờ có `aud: [..., orchestration-api]` + `permissions: {orchestration-api: [read:*, write:*]}`.
 
-**Chọn API nào?** Theo endpoint app gọi:
+**Chọn API nào?** Dropdown "Select an API" là **danh sách API riêng biệt** — chọn cái ứng với nhóm endpoint app gọi, không phải chọn nhiều nhất có thể:
 
-| App gọi | Chọn API trong dropdown |
-|---|---|
-| Zeebe REST `/v2/...`, gRPC, Operate, Tasklist | **Orchestration API** |
-| Web Modeler public REST | Web Modeler API |
-| Optimize | Optimize API |
-| Console | Console API |
+| Lựa chọn trong dropdown | Audience | Bảo vệ cái gì |
+|---|---|---|
+| **Orchestration API** | `orchestration-api` | Zeebe gRPC + REST API (`/v2/...`), Operate, Tasklist |
+| Web Modeler API | `web-modeler-public-api` | REST API công khai của Web Modeler (tạo/sửa model, project) |
+| Web Modeler Internal API | `web-modeler-api` | API nội bộ giữa Web Modeler UI ↔ backend |
+| Optimize API | `optimize-api` | Optimize |
+| Console API | `console-api` | Console |
+| Camunda Management Identity Resource Server | `camunda-identity-resource-server` | Identity UI/API |
+
+Case này app gọi `POST /v2/deployments`, `/v2/process-instances`, `/v2/messages`, search... → là **Zeebe REST API** → được bảo vệ bởi audience `orchestration-api` → phải chọn **Orchestration API**.
+
+Nếu chọn `Web Modeler API` thay thế: token sẽ có audience `web-modeler-public-api`, khi gọi Zeebe vẫn fail (audience không khớp — Orchestration chỉ chấp nhận các audience khai báo trong `camunda.security.oidc.audiences`, mặc định: `orchestration`, `orchestration-api`, `web-modeler-api`, xem `.orchestration/application.yaml`).
+
+**Quy tắc chọn:**
+
+1. App gọi Zeebe/Operate/Tasklist → **Orchestration API**
+2. App quản lý model qua REST → **Web Modeler API**
+3. Không chắc app gọi những API nào → gán **nhiều API cùng lúc** cũng được (lặp lại Assign permissions cho từng API), nhưng đừng gán bừa toàn bộ — nguyên tắc **least privilege**.
+
+⚠️ Và nhớ: dù chọn đúng API, vẫn cần **Bước 3** (client vào `defaultRoles` trong `.orchestration/application.yaml` + restart orchestration) — thiếu cái đó thì vẫn **403**.
 
 ### Bước 3 — Đưa client vào role của Orchestration cluster (chữa 403)
 
