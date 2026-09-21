@@ -1,0 +1,73 @@
+name: Generate version matrix
+description: Find changed/unchanged versions and generate matrix for them to be used in GHA workflow matrix.
+
+inputs:
+  versions-path:
+    description: Versions path to match.
+    required: true
+  reset-versions:
+    description: Return empty list of unchanged versions to force run the matrix.
+    default: "false"
+
+outputs:
+  # NOTE: To avoid GHA creating skipped matrix jobs, the logic is reversed here.
+  # So we get unchanged files instead of the changed ones. This twist is due to how GHA works.
+  unchanged:
+    description: JSON matrix of unchanged versions which will be used as and input for GHA workflow matrix exclude.
+    value: ${{ steps.get-versions.outputs.matrix-unchanged }}
+  should-run:
+    description: JSON matrix of changed versions (used to avoid running empty matrix).
+    value: ${{ steps.get-versions.outputs.should-run }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get changed dirs
+      id: changed-files
+      uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
+      with:
+        dir_names: "true"
+    - name: Generate matrix
+      shell: bash
+      id: get-versions
+      env:
+        ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        UNCHANGED_VERSIONS_TMP_FILE: unchanged_versions.txt
+        CHANGED_VERSIONS_TMP_FILE: changed_versions.txt
+      run: |
+        echo "Setting matrix based on changed files"
+        echo "Changed files:"
+        printf "%s\n" ${ALL_CHANGED_FILES}
+        touch ${CHANGED_VERSIONS_TMP_FILE}
+        touch ${UNCHANGED_VERSIONS_TMP_FILE}
+
+        ls -d ${{ inputs.versions-path }} | while read version_dir; do
+          if [[ $(echo ${ALL_CHANGED_FILES} | grep "${version_dir}") ]]; then
+            echo "Camunda version: ${version_dir}"
+            echo "${version_dir}" >> ${CHANGED_VERSIONS_TMP_FILE};
+          else
+            camunda_version="$(echo ${version_dir} | rev | cut -d '-' -f 1 | rev)";
+            echo "Camunda version: ${camunda_version}"
+            echo "${camunda_version}" >> ${UNCHANGED_VERSIONS_TMP_FILE};
+          fi
+        done
+
+        # NOTE: The keys "versions" and "camunda-version" are hard-coded and should be used in the workflow matrix.
+        # Unchanged.
+        matrix_unchanged="$(cat ${UNCHANGED_VERSIONS_TMP_FILE} |
+          jq -s -c -R 'split("\n") | .[:-1] | map({"versions": {"camunda-version": .}})')"
+        echo "matrix-unchanged=${matrix_unchanged}" | tee -a $GITHUB_OUTPUT
+        # Changed.
+        should_run="$([[ -n $(while read -r version_dir; do
+          camunda_version="$(echo "${version_dir}" | rev | cut -d '-' -f 1 | rev)"
+          yq -r '.routineVersions[] | tostring' docker-compose/versions/versions.yaml |
+            grep -Fxq "${camunda_version}" && echo "${version_dir}"
+        done < ${CHANGED_VERSIONS_TMP_FILE}) ]] && echo "true" || echo "false")"
+        echo "should-run=${should_run}" | tee -a $GITHUB_OUTPUT
+
+        # Force the downstream workflows run for all versions.
+        if [[ ${{ inputs.reset-versions }} == 'true' ]]; then
+          echo "Reset versions..."
+          echo "matrix-unchanged=[]" | tee -a $GITHUB_OUTPUT
+          echo "should-run=true" | tee -a $GITHUB_OUTPUT
+        fi

@@ -1,0 +1,130 @@
+name: "Docker Compose | Test - E2E - Full Setup"
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docker-compose/versions/**
+  pull_request:
+    paths:
+      - .github/workflows/docker-compose-test-e2e-template.yaml
+      - .github/workflows/docker-compose-test-e2e-full-setup.yaml
+      - .github/actions/**
+      - docker-compose/versions/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  init:
+    name: Generate version matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Detect shared CI changes
+        id: ci-changes
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            ci:
+              - .github/workflows/docker-compose-test-e2e-template.yaml
+              - .github/workflows/docker-compose-test-e2e-full-setup.yaml
+              - .github/actions/**
+      - name: Generate versions
+        id: generate-versions-matrix
+        uses: ./.github/actions/generate-versions-matrix
+        with:
+          versions-path: "docker-compose/versions/camunda-8.*"
+          reset-versions: ${{ steps.ci-changes.outputs.ci }}
+    outputs:
+      unchanged-versions: ${{ steps.generate-versions-matrix.outputs.unchanged }}
+
+  exec:
+    needs: [init]
+    name: ${{ matrix.versions.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        versions:
+          # Camunda 8.7
+          - name: Camunda 8.7 ⭐
+            camunda-version: "8.7"
+            main-compose-args: "-f docker-compose.yaml"
+            e2e-test-enabled: true
+          - name: Camunda 8.7 - Identity Disabled
+            camunda-version: "8.7"
+            main-compose-args: "-f docker-compose-core.yaml"
+            e2e-test-enabled: false
+          - name: Camunda 8.7 - Web Modeler Standalone
+            camunda-version: "8.7"
+            main-compose-args: "-f docker-compose-web-modeler.yaml"
+            e2e-test-enabled: false
+          # Camunda 8.8
+          - name: Camunda 8.8 ⭐
+            camunda-version: "8.8"
+            main-compose-args: "-f docker-compose-full.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.8/tests"
+            timeout-minutes: 45
+          - name: Camunda 8.8 - Identity Disabled
+            camunda-version: "8.8"
+            main-compose-args: "-f docker-compose.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.8/tests-lightweight"
+            timeout-minutes: 45
+          - name: Camunda 8.8 - Web Modeler Standalone
+            camunda-version: "8.8"
+            main-compose-args: "-f docker-compose-web-modeler.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.8/tests"
+            e2e-test-args: "web_modeler_login.spec.ts"
+          # Camunda 8.9
+          - name: Camunda 8.9 ⭐
+            camunda-version: "8.9"
+            main-compose-args: "-f docker-compose-full.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.9/tests"
+            timeout-minutes: 45
+          - name: Camunda 8.9 - Identity Disabled
+            camunda-version: "8.9"
+            main-compose-args: "-f docker-compose.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.9/tests-lightweight"
+            timeout-minutes: 45
+          - name: Camunda 8.9 - Web Modeler Standalone
+            camunda-version: "8.9"
+            main-compose-args: "-f docker-compose-web-modeler.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.9/tests"
+            e2e-test-args: "web_modeler_login.spec.ts"
+          # Camunda 8.10
+          - name: Camunda 8.10
+            camunda-version: "8.10"
+            main-compose-args: "-f docker-compose.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.10/tests-lightweight"
+            timeout-minutes: 45
+          - name: Camunda 8.10 - Full Stack
+            camunda-version: "8.10"
+            main-compose-args: "-f docker-compose-full.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.10/tests"
+            timeout-minutes: 45
+          - name: Camunda 8.10 - Hub Standalone
+            camunda-version: "8.10"
+            main-compose-args: "-f docker-compose-hub.yaml"
+            e2e-test-enabled: true
+            e2e-test-directory: "docker-compose/versions/camunda-8.10/tests"
+            e2e-test-args: "hub_login.spec.ts"
+        exclude: ${{ fromJson(needs.init.outputs.unchanged-versions) }}
+    uses: ./.github/workflows/docker-compose-test-e2e-template.yaml
+    secrets: inherit
+    with:
+      camunda-version: ${{ matrix.versions.camunda-version }}
+      deps-compose-args: ${{ matrix.versions.deps-compose-args || '' }}
+      main-compose-args: ${{ matrix.versions.main-compose-args }}
+      e2e-test-enabled: ${{ matrix.versions.e2e-test-enabled }}
+      e2e-test-directory: ${{ matrix.versions.e2e-test-directory || 'docker-compose/test/e2e' }}
+      e2e-test-args: ${{ matrix.versions.e2e-test-args || '' }}
+      timeout-minutes: ${{ matrix.versions.timeout-minutes || 30 }}

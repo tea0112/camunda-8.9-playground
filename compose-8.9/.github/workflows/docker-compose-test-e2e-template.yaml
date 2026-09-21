@@ -1,0 +1,144 @@
+name: "Docker Compose | Test - E2E - Template"
+
+on:
+  workflow_call:
+    inputs:
+      camunda-version:
+        description: Camunda minor version in format x.y
+        required: true
+        type: string
+      deps-compose-args:
+        description: Arguments supplied to Docker Compose dependencies
+        type: string
+      main-compose-args:
+        description: Arguments supplied to Docker Compose
+        required: true
+        type: string
+      e2e-test-enabled:
+        description: Run Playwright tests
+        type: boolean
+        default: true
+      e2e-test-directory:
+        description: Directory of the E2E files
+        required: false
+        type: string
+        default: docker-compose/test/e2e
+      e2e-test-args:
+        description: Arguments supplied to Playwright
+        required: false
+        type: string
+      timeout-minutes:
+        description: Job timeout in minutes
+        required: false
+        type: number
+        default: 30
+
+env:
+  COMPOSE_WORKING_DIRECTORY: docker-compose/versions/camunda-${{ inputs.camunda-version }}
+
+jobs:
+  run:
+    # if: contains(inputs.changed-versions, inputs.camunda-version)
+    name: Run
+    runs-on: ubuntu-latest
+    concurrency:
+      group: docker-compose-e2e-${{ inputs.camunda-version }}-${{ inputs.main-compose-args }}-${{ github.ref_name }}
+      cancel-in-progress: false
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      #
+      # Init.
+
+      - name: ℹ️ Print workflow inputs ℹ️
+        env:
+          GITHUB_CONTEXT: ${{ toJson(inputs) }}
+        run: |
+          echo "Workflow Inputs:"
+          echo "${GITHUB_CONTEXT}"
+      - name: ℹ️ Print Docker Compose version ℹ️
+        run: |
+          docker compose version
+      - name: disable and stop mono-xsp4.service
+        run: |
+          sudo systemctl stop mono-xsp4.service || true
+          sudo systemctl disable mono-xsp4.service || true
+          sudo killall mono || true
+          sudo killall xsp4 || true
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Import Vault secrets
+        id: test-credentials-secret
+        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          method: approle
+          roleId: ${{ secrets.VAULT_ROLE_ID }}
+          secretId: ${{ secrets.VAULT_SECRET_ID }}
+          secrets: |
+            secret/data/products/distribution/ci HARBOR_REGISTRY_USER;
+            secret/data/products/distribution/ci HARBOR_REGISTRY_PASSWORD;
+            secret/data/products/distribution/ci DOCKERHUB_USERNAME;
+            secret/data/products/distribution/ci DOCKERHUB_PASSWORD;
+          exportEnv: true
+
+      - name: Login to DockerHub
+        run: |
+          echo '${{ env.DOCKERHUB_PASSWORD }}' |
+            docker login -u '${{ env.DOCKERHUB_USERNAME }}' --password-stdin
+
+      - name: Login to Camunda registry
+        # Only 8.3–8.5 pull images from registry.camunda.cloud; later versions use DockerHub.
+        if: ${{ contains(fromJSON('["8.3","8.4","8.5"]'), inputs.camunda-version) }}
+        run: |
+          echo '${{ env.HARBOR_REGISTRY_PASSWORD }}' |
+            docker login -u '${{ env.HARBOR_REGISTRY_USER }}' --password-stdin registry.camunda.cloud
+
+      #
+      # End-to-End tests setup (before Docker startup to avoid timeout).
+
+      - name: Install Playwright
+        uses: ./.github/actions/install-playwright
+        if: inputs.e2e-test-enabled
+        with:
+          working-directory: ${{ inputs.e2e-test-directory }}
+
+      #
+      # Docker Compose.
+
+      - name: ⭐ Bring up containers dependencies
+        if: inputs.deps-compose-args
+        working-directory: ${{ env.COMPOSE_WORKING_DIRECTORY }}
+        run: |
+          docker compose ${{ inputs.deps-compose-args }} \
+            up --quiet-pull -d
+      - name: ⭐ Bring up containers
+        working-directory: ${{ env.COMPOSE_WORKING_DIRECTORY }}
+        run: |
+          docker compose ${{ inputs.main-compose-args }} \
+            up --quiet-pull -d
+      - name: Wait until all containers are healthy
+        timeout-minutes: 5
+        run: |
+          while $(docker container ls | grep -q -e 'unhealthy' -e 'health: starting'); do
+            echo "Some containers are not healthy yet"
+            docker container ls --format "table {{.Image}}\t{{.Status}}";
+            sleep 15;
+          done
+
+      #
+      # End-to-End tests.
+
+      - name: Run Playwright tests
+        if: inputs.e2e-test-enabled
+        id: test
+        working-directory: ${{ inputs.e2e-test-directory }}
+        run: |
+          npx playwright test ${{ inputs.e2e-test-args }}
+      - name: Upload Playwright reports
+        if: always() && steps.test.conclusion != 'skipped'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: docker-compose-playwright-report-${{ inputs.camunda-version }}-${{ steps.test.conclusion }}-${{ github.run_id }}
+          path: ${{ inputs.e2e-test-directory }}/playwright-report/
+          retention-days: 30

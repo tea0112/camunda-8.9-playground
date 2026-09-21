@@ -1,0 +1,53 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Playwright testing artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+docker-compose/versions/*/tests-lightweight/resources
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Docker Compose runtime files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!docker-compose/versions/*/.env
+docker-compose/versions/*/driver-lib/*
+!docker-compose/versions/*/driver-lib/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Local H2 database files used by docker-compose v8.9
+docker-compose/versions/camunda-8.9/camunda-data/*
+!docker-compose/versions/camunda-8.9/camunda-data/.gitkeep

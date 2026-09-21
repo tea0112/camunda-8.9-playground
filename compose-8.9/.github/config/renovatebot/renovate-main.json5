@@ -1,0 +1,34 @@
+{
+  dependencyDashboard: true,
+  labels: ["dependencies"],
+  separateMinorPatch: true,
+  minor: {
+    enabled: true,
+  },
+  patch: {
+    enabled: true,
+  },
+  packageRules: [
+    {
+      description: "Auto-merge non-major updates once CI passes.",
+      matchUpdateTypes: ["minor", "patch", "pin", "digest"],
+      automerge: true,
+      platformAutomerge: true,
+      automergeStrategy: "squash",
+      addLabels: ["automerge"],
+    },
+    {
+      description: "Never auto-merge alpha release candidates.",
+      matchNewValue: "/.*alpha[0-9]*-rc[0-9]*/",
+      automerge: false,
+    },
+  ],
+  hostRules: [
+    {
+      hostType: "docker",
+      matchHost: "https://registry.camunda.cloud",
+      username: "{{ secrets.DISTRO_CAMUNDA_DOCKER_REGISTRY_USERNAME }}",
+      password: "{{ secrets.DISTRO_CAMUNDA_DOCKER_REGISTRY_PASSWORD }}",
+    },
+  ],
+}

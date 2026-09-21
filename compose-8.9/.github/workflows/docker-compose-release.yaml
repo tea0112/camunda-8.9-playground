@@ -1,0 +1,72 @@
+# NOTE: Camunda Docker Compose release is a rolling release.
+# So it's always 1 artifact per Camunda minor version.
+name: "Docker Compose | Release"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/docker-compose-release-template.yaml
+      - .github/workflows/docker-compose-release.yaml
+      - docker-compose/versions/**
+  pull_request:
+    paths:
+      - .github/workflows/docker-compose-release-template.yaml
+      - .github/workflows/docker-compose-release.yaml
+  workflow_dispatch:
+    inputs:
+      release-all:
+        description: Release all versions.
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  init:
+    name: Generate version matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Generate versions
+        id: generate-versions-matrix
+        uses: ./.github/actions/generate-versions-matrix
+        with:
+          versions-path: "docker-compose/versions/camunda-*"
+          reset-versions: "${{ inputs.release-all || 'false' }}"
+    outputs:
+      should-run: ${{ steps.generate-versions-matrix.outputs.should-run }}
+      unchanged-versions: ${{ steps.generate-versions-matrix.outputs.unchanged }}
+
+  exec:
+    needs: [init]
+    if: ${{ needs.init.outputs.should-run == 'true' }}
+    name: ${{ matrix.versions.name || 'Skipped' }}
+    strategy:
+      fail-fast: false
+      # To release the versions in the same order as presented in the matrix.
+      max-parallel: 1
+      matrix:
+        versions:
+          - name: Camunda 8.4
+            camunda-version: 8.4
+          - name: Camunda 8.5
+            camunda-version: 8.5
+          - name: Camunda 8.6
+            camunda-version: 8.6
+          - name: Camunda 8.7
+            camunda-version: 8.7
+          - name: Camunda 8.8
+            camunda-version: 8.8
+          - name: Camunda 8.9
+            camunda-version: 8.9
+          - name: Camunda 8.10
+            camunda-version: "8.10"
+        exclude: ${{ fromJson(needs.init.outputs.unchanged-versions) }}
+    uses: ./.github/workflows/docker-compose-release-template.yaml
+    secrets: inherit
+    with:
+      camunda-version: ${{ matrix.versions.camunda-version }}

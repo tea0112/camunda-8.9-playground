@@ -1,0 +1,31 @@
+name: Renovatebot | Config Check
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/renovatebot-config-check.yaml'
+      - '.github/renovate.json5'
+      - '.github/config/renovatebot/**'
+  pull_request:
+    paths:
+      - '.github/workflows/renovatebot-config-check.yaml'
+      - '.github/renovate.json5'
+      - '.github/config/renovatebot/**'
+  workflow_dispatch: { }
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check renovate config
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+    - name: Validate renovate config
+      uses: docker://renovate/renovate
+      with:
+        entrypoint: bash
+        args: -c "renovate-config-validator .github/renovate.json5 .github/config/renovatebot/*"

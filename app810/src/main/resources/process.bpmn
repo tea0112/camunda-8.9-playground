@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://example.com">
+  <bpmn:message id="order-received-msg" name="order-received" />
+  <bpmn:process id="compat-process" isExecutable="true">
+    <bpmn:startEvent id="start" />
+    <bpmn:sequenceFlow id="Flow1" sourceRef="start" targetRef="task" />
+    <bpmn:serviceTask id="task" name="Compat Task">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="compat-task" />
+      </bpmn:extensionElements>
+      <bpmn:outgoing>Flow2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow2" sourceRef="task" targetRef="end" />
+    <bpmn:endEvent id="end" />
+  </bpmn:process>
+  <bpmn:process id="msg-process" isExecutable="true">
+    <bpmn:startEvent id="msgStart">
+      <bpmn:messageEventDefinition messageRef="order-received-msg" />
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="MFlow1" sourceRef="msgStart" targetRef="msgEnd" />
+    <bpmn:endEvent id="msgEnd" />
+  </bpmn:process>
+</bpmn:definitions>

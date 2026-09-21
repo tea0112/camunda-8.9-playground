@@ -1,0 +1,88 @@
+# type: Automation
+# owner: @camunda/distribution-team
+---
+# Single stable required status check for GitHub native auto-merge. The E2E
+# matrix job names are version-dynamic and its workflow is path-filtered, so
+# neither can be required directly. This workflow posts one fixed commit
+# status ("gate") to the PR head SHA.
+#
+# It posts a *commit status* via the API rather than relying on its own job
+# check-run: a workflow_run-triggered job's check-run attaches to the default
+# branch commit, not the PR head, so it never lands on the PR. A commit status
+# written with an explicit SHA always attaches to that SHA.
+#
+#   - pull_request: set "gate" = pending when E2E-relevant paths changed (the
+#     workflow_run event resolves it), or = success immediately when no
+#     E2E-relevant path changed (E2E will not run for this PR).
+#   - workflow_run: for PR-triggered E2E runs, mirror the E2E conclusion onto
+#     the PR head SHA (workflow_run.head_sha). Non-PR runs (push to main) are
+#     ignored.
+name: Merge Gate
+
+on:
+  workflow_run:
+    workflows: ["Docker Compose | Test - E2E - Full Setup"]
+    types: [completed]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  set-pending:
+    name: set-pending
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Detect E2E-relevant changes
+        id: changes
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            e2e:
+              - docker-compose/versions/**
+              - .github/workflows/docker-compose-test-e2e-template.yaml
+              - .github/workflows/docker-compose-test-e2e-full-setup.yaml
+              - .github/actions/**
+
+      - name: Post gate status
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          E2E: ${{ steps.changes.outputs.e2e }}
+        with:
+          script: |
+            const e2e = process.env.E2E === 'true';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              context: 'gate',
+              state: e2e ? 'pending' : 'success',
+              description: e2e ? 'Waiting for E2E' : 'No E2E-relevant changes',
+            });
+
+  mirror-e2e:
+    name: mirror-e2e
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Mirror E2E result onto PR head
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const ok = run.conclusion === 'success';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: run.head_sha,
+              context: 'gate',
+              state: ok ? 'success' : 'failure',
+              description: `E2E ${run.conclusion}`,
+              target_url: run.html_url,
+            });

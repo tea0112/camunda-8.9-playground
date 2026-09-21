@@ -1,0 +1,102 @@
+{
+  description: "Keeps Docker Compose up to date",
+  packageRules: [
+    // Disable Minor and Major updates by default.
+    {
+      enabled: false,
+      matchFileNames: ["docker-compose/versions/**"],
+      matchUpdateTypes: ["minor", "major"],
+    },
+    // Disable unsupported Camunda versions.
+    {
+      enabled: false,
+      matchFileNames: [
+        "docker-compose/versions/camunda-8.0/**",
+        "docker-compose/versions/camunda-8.1/**",
+        "docker-compose/versions/camunda-8.2/**",
+      ],
+    },
+    // Set global config.
+    {
+      addLabels: ["deps/docker-compose"],
+      semanticCommitScope: "docker-compose",
+      matchFileNames: ["docker-compose/versions/**"],
+    },
+
+    //
+    // Main groups.
+    // This section should be updated with the Camunda supported versions.
+    // Start of minor cycle chores.
+    {
+      groupName: "camunda-docker-compose-8.3",
+      addLabels: ["version/8.3", "deps/docker-compose"],
+      matchFileNames: ["docker-compose/versions/camunda-8.3/**"],
+      matchUpdateTypes: ["patch"],
+    },
+    {
+      groupName: "camunda-docker-compose-8.4",
+      addLabels: ["version/8.4", "deps/docker-compose"],
+      matchFileNames: ["docker-compose/versions/camunda-8.4/**"],
+      matchUpdateTypes: ["patch"],
+    },
+    {
+      groupName: "camunda-docker-compose-8.5",
+      addLabels: ["version/8.5", "deps/docker-compose"],
+      matchFileNames: ["docker-compose/versions/camunda-8.5/**"],
+      matchUpdateTypes: ["patch"],
+    },
+    {
+      groupName: "camunda-docker-compose-8.6",
+      addLabels: ["version/8.6", "deps/docker-compose"],
+      matchFileNames: ["docker-compose/versions/camunda-8.6/**"],
+      matchUpdateTypes: ["patch"],
+    },
+    {
+      groupName: "camunda-docker-compose-8.7",
+      addLabels: ["version/8.7", "deps/docker-compose"],
+      matchFileNames: ["docker-compose/versions/camunda-8.7/**"],
+      matchUpdateTypes: ["patch"],
+    },
+    {
+      groupName: "camunda-docker-compose-8.8",
+      addLabels: ["version/8.8", "deps/docker-compose"],
+      matchFileNames: ["docker-compose/versions/camunda-8.8/**"],
+      matchUpdateTypes: ["patch"],
+    },
+    {
+      groupName: "camunda-docker-compose-8.9",
+      addLabels: ["version/8.9", "deps/docker-compose"],
+      matchFileNames: ["docker-compose/versions/camunda-8.9/**"],
+      // Allows only patch and alpha, but no -rc (e.g., 8.7.0, 8.7.0-alpha3, but no 8.7.0-alpha3-rc1).
+      "allowedVersions": "/^8\\.9\\.\\d+(-alpha[0-9]*)?$/"
+    },
+    // End of minor cycle chores.
+
+    // Disable auto-merge for alpha release candidates.
+    {
+      matchNewValue: "/.*alpha[0-9]*-rc[0-9]*/",
+      automerge: false,
+    },
+  ],
+
+  customManagers: [
+    {
+      customType: "regex",
+      managerFilePatterns: ["/.env/"],
+      datasourceTemplate: "docker",
+      matchStrings: [
+        "# renovate: datasource=docker depName=(?<depName>[^\\s]+?)(?: (lookupName|packageName)=(?<packageName>[^\\s]+?))?(?: versioning=(?<versioning>[^\\s]+?))?(?: registryUrl=(?<registryUrl>[^\\s]+?))?\\s*?(\\S+)=(?<currentValue>\\S+)",
+      ],
+      versioningTemplate: "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["\\.console/application\\.yaml$"],
+      datasourceTemplate: "docker",
+      matchStrings: [
+        "# renovate: datasource=docker depName=(?<depName>[^\\s]+?)(?: (lookupName|packageName)=(?<packageName>[^\\s]+?))?(?: versioning=(?<versioning>[^\\s]+?))?(?: registryUrl=(?<registryUrl>[^\\s]+?))?\\s*version:\\s*\"(?<currentValue>[^\"]+)\"",
+      ],
+      versioningTemplate: "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}",
+    },
+  ],
+}

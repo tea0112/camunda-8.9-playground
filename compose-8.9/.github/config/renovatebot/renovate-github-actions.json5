@@ -1,0 +1,16 @@
+{
+  description: "Keeps GitHub Actions up to date",
+  packageRules: [
+    {
+      semanticCommitScope: "github-actions",
+      groupName: "github-actions",
+      addLabels: ["deps/github-actions"],
+      matchManagers: ["github-actions"],
+      schedule: ["every weekend"],
+    },
+    {
+      matchDepNames: ["camunda/team-distribution"],
+      enabled: false,
+    },
+  ],
+}

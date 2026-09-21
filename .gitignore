@@ -1,0 +1,5 @@
+# Local compose state, test app build output
+compose-8.9/docker-compose/versions/camunda-8.9/camunda-data/
+app810/target/
+*.log
+.DS_Store
